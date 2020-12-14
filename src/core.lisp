@@ -86,27 +86,50 @@
 
 ;;; Feed-forward
 
+;; (defun calc-u-vec (in-vec layer)
+;;   (let ((w-mat (layer-w-mat layer)))
+;;     (declare (type (simple-array double-float) in-vec w-mat)
+;;              (optimize (speed 3) (safety 0)))
+;;     (loop for j fixnum from 0 below (layer-out-dim layer) do
+;;       (setf (aref (layer-u-vec layer) j)
+;;             (loop for i fixnum from 0 below (layer-in-dim layer)
+;;                   summing
+;;                   (* (aref w-mat j i)
+;;                      (aref in-vec i))
+;;                   double-float)))
+;;     (layer-u-vec layer)))
+
+;; (defun calc-z-vec (layer)
+;;   (let ((u-vec (layer-u-vec layer)))
+;;     (declare (type (simple-array double-float) u-vec)
+;;              (optimize (speed 3) (safety 0)))
+;;     (loop for i fixnum from 0 below (layer-out-dim layer) do
+;;       (setf (aref (layer-z-vec layer) i)
+;;             (funcall (layer-activation-func layer) (aref u-vec i))))
+;;     (layer-z-vec layer)))
+
+;; (defun forward (in-vec nn)
+;;   (loop for i from 0 to (1- (nn-n-of-layers nn)) do
+;;     (if (zerop i)
+;;       (progn (calc-u-vec in-vec (aref (nn-layer-vec nn) i))
+;;              (calc-z-vec (aref (nn-layer-vec nn) i)))
+;;       (progn (calc-u-vec (layer-z-vec (aref (nn-layer-vec nn) (1- i))) (aref (nn-layer-vec nn) i))
+;;              (calc-z-vec (aref (nn-layer-vec nn) i))))))
+
 (defun calc-u-vec (in-vec layer)
-  (let ((w-mat (layer-w-mat layer)))
-    (declare (type (simple-array double-float) in-vec w-mat)
-             (optimize (speed 3) (safety 0)))
-    (loop for j fixnum from 0 below (layer-out-dim layer) do
-      (setf (aref (layer-u-vec layer) j)
-            (loop for i fixnum from 0 below (layer-in-dim layer)
-                  summing
-                  (* (aref w-mat j i)
-                     (aref in-vec i))
-                  double-float)))
-    (layer-u-vec layer)))
+  (loop for j from 0 to (1- (layer-out-dim layer)) do
+    (setf (aref (layer-u-vec layer) j)
+          (loop for i from 0 to (1- (layer-in-dim layer))
+                summing
+                (* (aref (layer-w-mat layer) j i)
+                         (aref in-vec i)))))
+  (layer-u-vec layer))
 
 (defun calc-z-vec (layer)
-  (let ((u-vec (layer-u-vec layer)))
-    (declare (type (simple-array double-float) u-vec)
-             (optimize (speed 3) (safety 0)))
-    (loop for i fixnum from 0 below (layer-out-dim layer) do
-      (setf (aref (layer-z-vec layer) i)
-            (funcall (layer-activation-func layer) (aref u-vec i))))
-    (layer-z-vec layer)))
+  (loop for i from 0 to (1- (layer-out-dim layer)) do
+    (setf (aref (layer-z-vec layer) i)
+          (funcall (layer-activation-func layer) (aref (layer-u-vec layer) i))))
+  (layer-z-vec layer))
 
 (defun forward (in-vec nn)
   (loop for i from 0 to (1- (nn-n-of-layers nn)) do
@@ -118,39 +141,57 @@
 
 ;;; Back-propagation
 
-(defun calc-last-layer-delta (train-vec last-layer)
-  (let ((delta-vec (layer-delta-vec last-layer))
-        (z-vec (layer-z-vec last-layer)))
-    (declare (type (simple-array double-float) train-vec delta-vec z-vec)
-             (optimize (speed 3) (safety 0)))
-    (loop for j fixnum from 0 below (layer-out-dim last-layer) do
-      (setf (aref delta-vec j)
-            (- (aref z-vec j)
-               (aref train-vec j))))))
+;; (defun calc-last-layer-delta (train-vec last-layer)
+;;   (let ((z-vec (layer-z-vec last-layer)))
+;;     (declare (type (simple-array double-float) train-vec z-vec)
+;;              (optimize (speed 3) (safety 0)))
+;;     (loop for j fixnum from 0 below (layer-out-dim last-layer) do
+;;       (setf (aref (layer-delta-vec last-layer) j)
+;;             (- (aref z-vec j)
+;;                (aref train-vec j))))))
 
-(defun calc-layer-delta (layer next-layer)
-  (let ((next-delta-vec (layer-delta-vec next-layer))
-        (next-w-mat (layer-w-mat next-layer))
-        (u-vec (layer-u-vec layer)))
-    (declare (type (simple-array double-float) next-delta-vec next-w-mat u-vec)
-             (optimize (speed 3) (safety 0)))
-    (loop for j fixnum from 0 below (layer-in-dim next-layer) do
-      (setf (aref (layer-delta-vec layer) j)
-            (* (funcall (layer-activation-func-diff layer) (aref u-vec j))
-               (loop for k fixnum from 0 below (layer-out-dim next-layer)
-                     summing
-                     (* (aref next-delta-vec k) (aref next-w-mat k j))
-                     double-float))))))
+;; (defun calc-layer-delta (layer next-layer)
+;;   (let ((next-delta-vec (layer-delta-vec next-layer))
+;;         (next-w-mat (layer-w-mat next-layer))
+;;         (u-vec (layer-u-vec layer)))
+;;     (declare (type (simple-array double-float) next-delta-vec next-w-mat u-vec)
+;;              (optimize (speed 3) (safety 0)))
+;;     (loop for j fixnum from 0 below (layer-in-dim next-layer) do
+;;       (setf (aref (layer-delta-vec layer) j)
+;;             (* (funcall (layer-activation-func-diff layer) (aref u-vec j))
+;;                (loop for k fixnum from 0 below (layer-out-dim next-layer)
+;;                      summing
+;;                      (* (aref next-delta-vec k) (aref next-w-mat k j))
+;;                      double-float))))))
+
+;; (defun backward (train-vec nn)
+;;   ;; calculate last layer's delta
+;;   (let ((last-layer (aref (nn-layer-vec nn) (1- (nn-n-of-layers nn)))))
+;;     (calc-last-layer-delta train-vec last-layer))
+;;   ;; calculate other deltas
+;;   (loop for l from (- (nn-n-of-layers nn) 2) downto 0 do
+;;     (let ((layer (aref (nn-layer-vec nn) l))
+;;           (next-layer (aref (nn-layer-vec nn) (1+ l))))
+;;       (calc-layer-delta layer next-layer))))
 
 (defun backward (train-vec nn)
   ;; calculate last layer's delta
   (let ((last-layer (aref (nn-layer-vec nn) (1- (nn-n-of-layers nn)))))
-    (calc-last-layer-delta train-vec last-layer))
+    (loop for j from 0 to (1- (layer-out-dim last-layer)) do
+      (setf (aref (layer-delta-vec last-layer) j)
+            (- (aref (layer-z-vec last-layer) j)
+                     (aref train-vec j)))))
   ;; calculate other deltas
   (loop for l from (- (nn-n-of-layers nn) 2) downto 0 do
     (let ((layer (aref (nn-layer-vec nn) l))
           (next-layer (aref (nn-layer-vec nn) (1+ l))))
-      (calc-layer-delta layer next-layer))))
+      (loop for j from 0 to (1- (layer-in-dim next-layer)) do
+        (setf (aref (layer-delta-vec layer) j)
+              (* (funcall (layer-activation-func-diff layer) (aref (layer-u-vec layer) j))
+                          (loop for k from 0 to (1- (layer-out-dim next-layer))
+                                summing
+                                (* (aref (layer-delta-vec next-layer) k)
+                                         (aref (layer-w-mat next-layer) k j)))))))))
 
 (defun predict (in-vec nn)
   (forward in-vec nn)

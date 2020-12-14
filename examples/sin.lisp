@@ -13,24 +13,16 @@
          (list #'identity #'one))  ; 出力層の活性化関数: 回帰問題なので恒等写像
    0.05d0))
 
-(require 'sb-sprof)
-(sb-sprof:with-profiling (:max-samples 1000
-			  :report :flat
-			  :loop nil)
-  (dotimes (i 1000)
-    (mapc (lambda (in out) (update in out *nn*)) input-data train-data)))
+;; (require 'sb-sprof)
+;; (sb-sprof:with-profiling (:max-samples 1000
+;; 			  :report :flat
+;; 			  :loop nil)
+;;   (dotimes (i 1000)
+;;     (mapc (lambda (in out) (update in out *nn*)) input-data train-data)))
 
 (time
  (dotimes (i 1000)
    (mapc (lambda (in out) (update in out *nn*)) input-data train-data)))
-
-(defparameter *x*
-  (loop for x from -3.14 to 3.14 by 0.01 collect x))
-
-(defparameter *result*
-  (mapcar (lambda (x)
-            (aref (predict (vector (* x 1d0) 1d0) *nn*) 0))
-          *x*))
 
 (defparameter *nn2*
   (make-random-nn
@@ -39,11 +31,11 @@
          (list #'identity #'one))  ; 出力層の活性化関数: 回帰問題なので恒等写像
    0.05d0))
 
-(sb-sprof:with-profiling (:max-samples 1000
-			  :report :flat
-			  :loop nil)
-  (dotimes (i 1000)
-    (mapc (lambda (in out) (update in out *nn2*)) input-data train-data)))
+;; (sb-sprof:with-profiling (:max-samples 1000
+;; 			  :report :flat
+;; 			  :loop nil)
+;;   (dotimes (i 1000)
+;;     (mapc (lambda (in out) (update in out *nn2*)) input-data train-data)))
 
 (time
  (dotimes (i 1000)
@@ -56,6 +48,15 @@
 ;;   99.38% CPU
 ;;   7,119,363,056 processor cycles
 ;;   2,964,792,112 bytes consed
+
+
+(defparameter *x*
+  (loop for x from -3.14 to 3.14 by 0.01 collect x))
+
+(defparameter *result*
+  (mapcar (lambda (x)
+            (aref (predict (vector (* x 1d0) 1d0) *nn*) 0))
+          *x*))
 
 (defparameter *result2*
   (mapcar (lambda (x)
