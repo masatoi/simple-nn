@@ -6,217 +6,219 @@
 ;;; Structures
 
 (defstruct layer
-  in-dim   ; input dimension
-  out-dim  ; output dimension
-  w-mat    ; weight matrix
-  u-vec    ; input vector
-  z-vec    ; output vector
-  delta-vec ; differentiation respect to the input of the error function
-  activation-func
-  activation-func-diff)
+  ;; input dimension
+  (in-dim 1 :type fixnum :read-only t)
+  ;; output dimension
+  (out-dim 1 :type fixnum :read-only t)
+  ;; weight matrix
+  (w-mat nil :type (simple-array single-float))
+  ;; input vector
+  (u-vec nil :type (simple-array single-float))
+  ;; output vector
+  (z-vec nil :type (simple-array single-float))
+  ;; differentiation respect to the input of the error function
+  (delta-vec nil :type (simple-array single-float))
+  ;; activation function
+  (activation-func nil :type function :read-only t)
+  ;; activation function for calc the differentiation
+  (activation-func-diff nil :type function :read-only t))
 
 (defstruct nn
-  n-of-layers
-  layer-vec
-  learning-rate)
+  (n-layers 1 :type fixnum :read-only t)
+  (layer-vec nil :type simple-array)
+  (learning-rate 0.1 :type single-float))
 
 ;;; Constructors
 
-(defun make-random-weight (in-dim out-dim)
-  (let ((w (make-array (list out-dim in-dim) :element-type 'double-float)))
-    (loop for i from 0 to (1- out-dim) do
-      (loop for j from 0 to (1- in-dim) do
+(defun make-random-weight-matrix (in-dim out-dim)
+  (let ((w (make-array (list out-dim in-dim) :element-type 'single-float)))
+    (loop for i fixnum from 0 below out-dim do
+      (loop for j fixnum from 0 below in-dim do
         ;; initialize between -0.1 and 0.1
-        (setf (aref w i j) (- (random 0.2d0) 0.1d0))))
+        (setf (aref w i j) (- (random 0.2) 0.1))))
     w))
 
 (defun make-random-layer (in-dim out-dim activation-func activation-func-diff)
+  (declare (type fixnum in-dim out-dim)
+           (type (function (single-float) single-float) activation-func activation-func-diff))
   (make-layer :in-dim in-dim
               :out-dim out-dim
-              :w-mat (make-random-weight in-dim out-dim)
-              :u-vec (make-array out-dim :element-type 'double-float :initial-element 0d0)
-              :z-vec (make-array out-dim :element-type 'double-float :initial-element 0d0)
-              :delta-vec (make-array out-dim :element-type 'double-float :initial-element 0d0)
+              :w-mat (make-random-weight-matrix in-dim out-dim)
+              :u-vec (make-array out-dim :element-type 'single-float :initial-element 0.0)
+              :z-vec (make-array out-dim :element-type 'single-float :initial-element 0.0)
+              :delta-vec (make-array out-dim :element-type 'single-float :initial-element 0.0)
               :activation-func activation-func
               :activation-func-diff activation-func-diff))
 
-(defun make-random-nn (dimension-list activation-func-pair-list &optional (learning-rate 0.01d0))
+(defun make-random-nn (dimension-list activation-func-pair-list &optional (learning-rate 0.01))
   (labels ((make-layers (product dimension-list activation-func-pair-list)
              (if (< (length dimension-list) 2)
-               (nreverse product)
-               (make-layers (cons (make-random-layer (car dimension-list) (cadr dimension-list)
-                                                     (caar activation-func-pair-list)
-                                                     (cadar activation-func-pair-list))
-                                  product)
-                            (cdr dimension-list) (cdr activation-func-pair-list)))))
-    (make-nn :n-of-layers (1- (length dimension-list))
+                 (nreverse product)
+                 (make-layers (cons (make-random-layer (car dimension-list) (cadr dimension-list)
+                                                       (caar activation-func-pair-list)
+                                                       (cadar activation-func-pair-list))
+                                    product)
+                              (cdr dimension-list) (cdr activation-func-pair-list)))))
+    (make-nn :n-layers (1- (length dimension-list))
              :layer-vec (apply #'vector (make-layers nil dimension-list activation-func-pair-list))
              :learning-rate learning-rate)))
 
 ;;; Activation functions
 
 ;; RLF; Rectified Linear Function
+(declaim (ftype (function (single-float) single-float) RLF RLF-diff))
 (defun RLF (u)
-  (if (> u 0d0) u 0d0))
+  (declare (optimize (speed 3) (safety 0))
+           (type single-float u))
+  (if (> u 0.0) u 0.0))
 
 (defun RLF-diff (u)
-  (if (>= u 0d0) 1d0 0d0))
+  (declare (optimize (speed 3) (safety 0))
+           (type single-float u))
+  (if (>= u 0.0) 1.0 0.0))
 
 ;; Identical function
 ;; Differntial of identity function
+(declaim (ftype (function (single-float) single-float) one))
 (defun one (x)
   (declare (ignore x))
-  1d0)
+  1.0)
 
 ;; Logistic function
+(declaim (ftype (function (single-float) single-float) logistic logistic-diff))
 (defun logistic (u)
-  (/ 1d0 (+ 1d0 (exp (- u)))))
+  (declare (optimize (speed 3) (safety 0))
+           (type single-float u))
+  (/ 1.0 (+ 1.0 (exp (- u)))))
 
 (defun logistic-diff (u)
+  (declare (optimize (speed 3) (safety 0))
+           (type single-float u))
   (let ((f (logistic u)))
-    (* f (- 1d0 f))))
+    (* f (- 1.0 f))))
 
 ;; Hyperbolic tangent
-(declaim (ftype (function (double-float) double-float) tanh-diff))
+(declaim (ftype (function (single-float) single-float) tanh-diff))
 (defun tanh-diff (u)
-  (declare (type double-float u)
-           (optimize (speed 3) (safety 0)))
-  (let ((tanh-u (tanh u)))
-    (- 1d0 (* tanh-u tanh-u))))
+  (declare (optimize (speed 3) (safety 0))
+           (type single-float u))
+  (let ((tanh-u (the single-float (tanh u))))
+    (- 1.0 (* tanh-u tanh-u))))
 
 ;;; Feed-forward
 
-;; (defun calc-u-vec (in-vec layer)
-;;   (let ((w-mat (layer-w-mat layer)))
-;;     (declare (type (simple-array double-float) in-vec w-mat)
-;;              (optimize (speed 3) (safety 0)))
-;;     (loop for j fixnum from 0 below (layer-out-dim layer) do
-;;       (setf (aref (layer-u-vec layer) j)
-;;             (loop for i fixnum from 0 below (layer-in-dim layer)
-;;                   summing
-;;                   (* (aref w-mat j i)
-;;                      (aref in-vec i))
-;;                   double-float)))
-;;     (layer-u-vec layer)))
-
-;; (defun calc-z-vec (layer)
-;;   (let ((u-vec (layer-u-vec layer)))
-;;     (declare (type (simple-array double-float) u-vec)
-;;              (optimize (speed 3) (safety 0)))
-;;     (loop for i fixnum from 0 below (layer-out-dim layer) do
-;;       (setf (aref (layer-z-vec layer) i)
-;;             (funcall (layer-activation-func layer) (aref u-vec i))))
-;;     (layer-z-vec layer)))
-
-;; (defun forward (in-vec nn)
-;;   (loop for i from 0 to (1- (nn-n-of-layers nn)) do
-;;     (if (zerop i)
-;;       (progn (calc-u-vec in-vec (aref (nn-layer-vec nn) i))
-;;              (calc-z-vec (aref (nn-layer-vec nn) i)))
-;;       (progn (calc-u-vec (layer-z-vec (aref (nn-layer-vec nn) (1- i))) (aref (nn-layer-vec nn) i))
-;;              (calc-z-vec (aref (nn-layer-vec nn) i))))))
-
 (defun calc-u-vec (in-vec layer)
-  (loop for j from 0 to (1- (layer-out-dim layer)) do
-    (setf (aref (layer-u-vec layer) j)
-          (loop for i from 0 to (1- (layer-in-dim layer))
-                summing
-                (* (aref (layer-w-mat layer) j i)
-                         (aref in-vec i)))))
-  (layer-u-vec layer))
+  (let ((w-mat (layer-w-mat layer))
+        (u-vec (layer-u-vec layer)))
+    (declare (optimize (speed 3) (safety 0))
+             (type (simple-array single-float) in-vec w-mat u-vec))
+    (loop for j fixnum from 0 below (length u-vec) do
+      (setf (aref u-vec j)
+            (loop for i fixnum from 0 below (length in-vec)
+                  summing (* (aref w-mat j i)
+                             (aref in-vec i))
+                  single-float)))))
 
 (defun calc-z-vec (layer)
-  (loop for i from 0 to (1- (layer-out-dim layer)) do
-    (setf (aref (layer-z-vec layer) i)
-          (funcall (layer-activation-func layer) (aref (layer-u-vec layer) i))))
-  (layer-z-vec layer))
+  (let ((u-vec (layer-u-vec layer))
+        (z-vec (layer-z-vec layer))
+        (activation-func (layer-activation-func layer)))
+    (declare (optimize (speed 3) (safety 0))
+             (type (simple-array single-float) u-vec z-vec)
+             (type (function (single-float) single-float) activation-func))
+    (loop for i fixnum from 0 below (length z-vec) do
+      (setf (aref z-vec i)
+            (funcall activation-func (aref u-vec i))))
+    z-vec))
 
 (defun forward (in-vec nn)
-  (loop for i from 0 to (1- (nn-n-of-layers nn)) do
+  (loop for i from 0 to (1- (nn-n-layers nn)) do
     (if (zerop i)
-      (progn (calc-u-vec in-vec (aref (nn-layer-vec nn) i))
-             (calc-z-vec (aref (nn-layer-vec nn) i)))
-      (progn (calc-u-vec (layer-z-vec (aref (nn-layer-vec nn) (1- i))) (aref (nn-layer-vec nn) i))
-             (calc-z-vec (aref (nn-layer-vec nn) i))))))
+        (progn (calc-u-vec in-vec (aref (nn-layer-vec nn) i))
+               (calc-z-vec (aref (nn-layer-vec nn) i)))
+        (progn (calc-u-vec (layer-z-vec (aref (nn-layer-vec nn) (1- i))) (aref (nn-layer-vec nn) i))
+               (calc-z-vec (aref (nn-layer-vec nn) i))))))
 
 ;;; Back-propagation
 
-;; (defun calc-last-layer-delta (train-vec last-layer)
-;;   (let ((z-vec (layer-z-vec last-layer)))
-;;     (declare (type (simple-array double-float) train-vec z-vec)
-;;              (optimize (speed 3) (safety 0)))
-;;     (loop for j fixnum from 0 below (layer-out-dim last-layer) do
-;;       (setf (aref (layer-delta-vec last-layer) j)
-;;             (- (aref z-vec j)
-;;                (aref train-vec j))))))
-
-;; (defun calc-layer-delta (layer next-layer)
-;;   (let ((next-delta-vec (layer-delta-vec next-layer))
-;;         (next-w-mat (layer-w-mat next-layer))
-;;         (u-vec (layer-u-vec layer)))
-;;     (declare (type (simple-array double-float) next-delta-vec next-w-mat u-vec)
-;;              (optimize (speed 3) (safety 0)))
-;;     (loop for j fixnum from 0 below (layer-in-dim next-layer) do
-;;       (setf (aref (layer-delta-vec layer) j)
-;;             (* (funcall (layer-activation-func-diff layer) (aref u-vec j))
-;;                (loop for k fixnum from 0 below (layer-out-dim next-layer)
-;;                      summing
-;;                      (* (aref next-delta-vec k) (aref next-w-mat k j))
-;;                      double-float))))))
-
-;; (defun backward (train-vec nn)
-;;   ;; calculate last layer's delta
-;;   (let ((last-layer (aref (nn-layer-vec nn) (1- (nn-n-of-layers nn)))))
-;;     (calc-last-layer-delta train-vec last-layer))
-;;   ;; calculate other deltas
-;;   (loop for l from (- (nn-n-of-layers nn) 2) downto 0 do
-;;     (let ((layer (aref (nn-layer-vec nn) l))
-;;           (next-layer (aref (nn-layer-vec nn) (1+ l))))
-;;       (calc-layer-delta layer next-layer))))
-
 (defun backward (train-vec nn)
-  ;; calculate last layer's delta
-  (let ((last-layer (aref (nn-layer-vec nn) (1- (nn-n-of-layers nn)))))
-    (loop for j from 0 to (1- (layer-out-dim last-layer)) do
-      (setf (aref (layer-delta-vec last-layer) j)
-            (- (aref (layer-z-vec last-layer) j)
-                     (aref train-vec j)))))
-  ;; calculate other deltas
-  (loop for l from (- (nn-n-of-layers nn) 2) downto 0 do
-    (let ((layer (aref (nn-layer-vec nn) l))
-          (next-layer (aref (nn-layer-vec nn) (1+ l))))
-      (loop for j from 0 to (1- (layer-in-dim next-layer)) do
-        (setf (aref (layer-delta-vec layer) j)
-              (* (funcall (layer-activation-func-diff layer) (aref (layer-u-vec layer) j))
-                          (loop for k from 0 to (1- (layer-out-dim next-layer))
-                                summing
-                                (* (aref (layer-delta-vec next-layer) k)
-                                         (aref (layer-w-mat next-layer) k j)))))))))
+  (declare (optimize (speed 3) (safety 0)))
+
+  (let ((layer-vec (nn-layer-vec nn))
+        (n-layers (nn-n-layers nn)))
+    (declare (type (simple-array layer) layer-vec)
+             (type fixnum n-layers))
+
+    ;; calculate last layer's delta
+    (let* ((last-layer (aref layer-vec (1- n-layers)))
+           (z-vec (layer-z-vec last-layer))
+           (delta-vec (layer-delta-vec last-layer)))
+      (declare (type (simple-array single-float) train-vec z-vec delta-vec))
+      (loop for j fixnum from 0 below (layer-out-dim last-layer) do
+        (setf (aref delta-vec j) (- (aref z-vec j)
+                                    (aref train-vec j)))))
+
+    ;; calculate other deltas
+    (loop for l fixnum from (- n-layers 2) downto 0 do
+      (let ((layer (aref layer-vec l))
+            (next-layer (aref layer-vec (1+ l))))
+        (let ((u-vec (layer-u-vec layer))
+              (delta-vec (layer-delta-vec layer))
+              (next-delta-vec (layer-delta-vec next-layer))
+              (next-w-mat (layer-w-mat next-layer))
+              (activation-func-diff (layer-activation-func-diff layer)))
+          (declare (type (simple-array single-float) next-delta-vec next-w-mat u-vec delta-vec)
+                   (type (function (single-float) single-float) activation-func-diff))
+          (loop for j fixnum from 0 below (layer-in-dim next-layer) do
+            (setf (aref delta-vec j)
+                  (* (funcall activation-func-diff (aref u-vec j))
+                     (loop for k fixnum from 0 below (layer-out-dim next-layer)
+                           summing
+                           (* (aref next-delta-vec k) (aref next-w-mat k j))
+                           single-float)))))))))
+
+(defun update (in-vec train-vec nn)
+  (declare (optimize (speed 3) (safety 0))
+           (type (simple-array single-float) in-vec train-vec))
+  
+  (forward in-vec nn)
+  (backward train-vec nn)
+
+  (let ((layer-vec (nn-layer-vec nn))
+        (n-layers (nn-n-layers nn))
+        (learning-rate (nn-learning-rate nn)))
+    (declare (type (simple-array layer) layer-vec)
+             (type fixnum n-layers)
+             (type single-float learning-rate))
+
+    ;; update first layer
+    (let* ((first-layer (aref layer-vec 0))
+           (w-mat (layer-w-mat first-layer))
+           (delta-vec (layer-delta-vec first-layer)))
+      (declare (type (simple-array single-float) w-mat delta-vec))
+      (loop for i fixnum from 0 below (layer-in-dim first-layer) do
+        (loop for j fixnum from 0 below (layer-out-dim first-layer) do
+          (setf (aref w-mat j i) (- (aref w-mat j i)
+                                    (* learning-rate
+                                       (aref in-vec i)
+                                       (aref delta-vec j)))))))
+    ;; update other layer
+    (loop for l fixnum from 1 below n-layers do
+      (let* ((layer (aref layer-vec l))
+             (w-mat (layer-w-mat layer))
+             (delta-vec (layer-delta-vec layer))
+             (prev-layer (aref layer-vec (1- l)))
+             (prev-z-vec (layer-z-vec prev-layer)))
+        (declare (type (simple-array single-float) w-mat delta-vec prev-z-vec))
+        (loop for i fixnum from 0 below (layer-in-dim layer) do
+          (loop for j fixnum from 0 below (layer-out-dim layer) do
+            (setf (aref w-mat j i) (- (aref w-mat j i)
+                                      (* learning-rate
+                                         (aref prev-z-vec i)
+                                         (aref delta-vec j))))))))))
+
+;;; predict
 
 (defun predict (in-vec nn)
   (forward in-vec nn)
-  (layer-z-vec (aref (nn-layer-vec nn) (1- (nn-n-of-layers nn)))))
-
-(defun update (in-vec train-vec nn)
-  (forward in-vec nn)
-  (backward train-vec nn)
-  ;; update first layer
-  (let ((first-layer (aref (nn-layer-vec nn) 0)))
-    (loop for i from 0 to (1- (layer-in-dim first-layer)) do
-      (loop for j from 0 to (1- (layer-out-dim first-layer)) do
-        (setf (aref (layer-w-mat first-layer) j i)
-              (- (aref (layer-w-mat first-layer) j i)
-                       (* (nn-learning-rate nn)
-                          (aref in-vec i)
-                          (aref (layer-delta-vec first-layer) j)))))))
-  ;; update other layer
-  (loop for l from 1 to (1- (nn-n-of-layers nn)) do
-    (let ((layer (aref (nn-layer-vec nn) l))
-          (prev-layer (aref (nn-layer-vec nn) (1- l))))
-      (loop for i from 0 to (1- (layer-in-dim layer)) do
-        (loop for j from 0 to (1- (layer-out-dim layer)) do
-          (setf (aref (layer-w-mat layer) j i)
-                (- (aref (layer-w-mat layer) j i)
-                         (* (nn-learning-rate nn)
-                            (aref (layer-z-vec prev-layer) i)
-                            (aref (layer-delta-vec layer) j)))))))))
+  (layer-z-vec (aref (nn-layer-vec nn) (1- (nn-n-layers nn)))))
